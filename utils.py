@@ -2,6 +2,8 @@ import os.path
 from datetime import datetime
 import re
 from nltk import pos_tag
+import random
+from math import floor
 
 IDIOMS_FILE = "./data/idioms.txt"
 
@@ -119,6 +121,47 @@ def word_to_tags(word):
     return word, ps, tag
 
 
+def tag_line(line):
+    line = line.strip()
+    tuples = [word_to_tags(w) for w in line.split(" ")]
+    return tuples
+            
+
+def sent_has_idiom(sent):
+    for _, _, itag in sent:
+        if itag == "BEGIN":
+            return True
+    
+    return False
+
+def stratified_train_test(tagged_sentences,
+                          seed=floor(datetime.now().timestamp()),
+                          train_pct=0.8,
+                          undersample_factor=4):
+    with_idioms = [sent for sent in tagged_sentences if sent_has_idiom(sent)]
+    wo_idioms = [sent for sent in tagged_sentences if not sent_has_idiom(sent)]
+    
+    random.seed(seed)
+    
+    train_target = random.sample(with_idioms,
+                                 floor(len(with_idioms)*train_pct))
+    test_target = random.sample(with_idioms,
+                                floor(len(with_idioms)*(1-train_pct)))
+    
+
+    undersampled = random.sample(wo_idioms,len(with_idioms)*undersample_factor)    
+    train_without = random.sample(undersampled,
+                                  floor(len(undersampled)*train_pct))    
+    test_without = random.sample(undersampled,
+                                 floor(len(undersampled)*(1-train_pct)))
+    
+    train = train_target + train_without
+    test = test_target + test_without
+    
+    random.shuffle(train)
+    random.shuffle(test)
+    
+    return train, test
 
 
 
