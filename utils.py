@@ -48,10 +48,15 @@ def clear_file(output_file):
         with open(output_file, "w") as f:
             f.write("")
 
-def retain_case(word, word_lower):
+def retain_case(word, word_lower):    
+    # This can only happen from a previous tag
+    if "#" in word:
+        return word
+    
     if "#" in word_lower:
-        tag = word_lower.split("#")[1]
+        _,tag = word_lower.split("#")
         word = word + "#" + tag
+    
     return word
 
 def replace_with_tag(text, idiom):
