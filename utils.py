@@ -4,6 +4,10 @@ import re
 from nltk import pos_tag
 import random
 from math import floor
+from sklearn.metrics import confusion_matrix
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 IDIOMS_FILE = "./data/idioms.txt"
 
@@ -168,7 +172,70 @@ def stratified_train_test(tagged_sentences,
     
     return train, test
 
+## Taken from Session 5 NER notebook
+def word2features(sent, i):
+    word = sent[i][0]
+    postag = sent[i][1]
+
+    features = {
+        'bias': 1.0,
+        'word.lower()': word.lower(),
+        'word[-3:]': word[-3:],         #SUFFIX (ing... what else?)
+        'word.isupper()': word.isupper(),
+        'word.istitle()': word.istitle(),
+        'word.isdigit()': word.isdigit(),
+        'postag': postag,
+        'postag[:2]': postag[:2],
+    }
+    if i > 0:
+        word1 = sent[i-1][0]
+        postag1 = sent[i-1][1]
+        features.update({
+            '-1:word.lower()': word1.lower(),
+            '-1:word.istitle()': word1.istitle(),
+            '-1:word.isupper()': word1.isupper(),
+            '-1:postag': postag1,
+            '-1:postag[:2]': postag1[:2],
+        })
+    else:
+        features['BOS'] = True # Beginning of Sentence
+
+    if i < len(sent)-1:
+        word1 = sent[i+1][0]
+        postag1 = sent[i+1][1]
+        features.update({
+            '+1:word.lower()': word1.lower(),
+            '+1:word.istitle()': word1.istitle(),
+            '+1:word.isupper()': word1.isupper(),
+            '+1:postag': postag1,
+            '+1:postag[:2]': postag1[:2],
+        })
+    else:
+        features['EOS'] = True #End of sentence
+
+    return features
 
 
-    
-    
+def sent2features(sent):
+    return [word2features(sent, i) for i in range(len(sent))]
+
+def sent2labels(sent):
+    return [label for token, postag, label in sent]
+
+def draw_cm(actual_label, prediction_label):   
+    # create a confusion matrix for the true target value and the predicted target value
+    cm = confusion_matrix(y_true=actual_label, y_pred=prediction_label)
+    # config the plot
+    plt.figure(figsize=(8,8)) 
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues) # plt.cm.Blues
+    plt.tight_layout()
+    tick_marks = np.arange(2)
+    plt.xticks(tick_marks, ["idiom", "no_idiom"])
+    plt.yticks(tick_marks, ["idiom", "no_idiom"])
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    # add a layer to the plot describes the count for each pair of true value and prediction
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(x=j, y=i, s=int(cm[i, j]), va='center', ha='center', 
+                     color='black', fontsize=20)

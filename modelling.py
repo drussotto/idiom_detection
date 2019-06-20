@@ -1,0 +1,72 @@
+import pickle
+from utils import sent2features, sent2labels, draw_cm
+from sklearn_crfsuite import CRF
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics import classification_report, multilabel_confusion_matrix
+
+DATA_PATH = "./data/{}.pkl"
+
+with open(DATA_PATH.format("train"), "rb") as f:
+    train = pickle.load(f)
+    
+with open(DATA_PATH.format("test"), "rb") as f:
+    test = pickle.load(f)
+    
+X_train = [sent2features(s) for s in train]
+y_train = [sent2labels(s) for s in train]
+
+X_test = [sent2features(s) for s in test]
+y_test = [sent2labels(s) for s in test]
+    
+    
+crf = CRF(
+    algorithm='lbfgs',
+    c1=0.1,
+    c2=0.1,
+    max_iterations=20,
+    all_possible_transitions=False,
+)
+
+crf.fit(X_train, y_train)
+
+
+predictions = crf.predict(X_test)
+
+labels = list(crf.classes_)
+
+
+sorted_labels = sorted(
+    labels, 
+    key=lambda name: (name[1:], name[0])
+)
+
+
+report = classification_report(MultiLabelBinarizer().fit_transform(y_test),
+                               MultiLabelBinarizer().fit_transform(predictions),
+                               target_names=["BEGIN", "IN", "OUT"],
+                               digits=3)
+
+print(report)
+
+mtx = multilabel_confusion_matrix(MultiLabelBinarizer().fit_transform(y_test),
+                                  MultiLabelBinarizer().fit_transform(predictions))
+
+
+print(mtx)
+
+
+
+predictions_bin = ["idiom" if p[0] else "no_idiom" \
+                   for p in MultiLabelBinarizer().fit_transform(predictions)]
+y_test_bin = ["idiom" if y[0] else "no_idiom" \
+              for y in MultiLabelBinarizer().fit_transform(y_test)]
+
+
+
+
+draw_cm(y_test_bin, predictions_bin)
+
+
+
+
+
