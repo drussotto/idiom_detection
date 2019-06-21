@@ -3,6 +3,7 @@ from utils import sent2features, sent2labels, draw_cm
 from sklearn_crfsuite import CRF
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import classification_report, multilabel_confusion_matrix
+import eli5
 
 DATA_PATH = "./data/{}.pkl"
 
@@ -32,15 +33,6 @@ crf.fit(X_train, y_train)
 
 predictions = crf.predict(X_test)
 
-labels = list(crf.classes_)
-
-
-sorted_labels = sorted(
-    labels, 
-    key=lambda name: (name[1:], name[0])
-)
-
-
 report = classification_report(MultiLabelBinarizer().fit_transform(y_test),
                                MultiLabelBinarizer().fit_transform(predictions),
                                target_names=["BEGIN", "IN", "OUT"],
@@ -61,10 +53,69 @@ predictions_bin = ["idiom" if p[0] else "no_idiom" \
 y_test_bin = ["idiom" if y[0] else "no_idiom" \
               for y in MultiLabelBinarizer().fit_transform(y_test)]
 
+draw_cm(y_test_bin, predictions_bin)
+
+weights_exp = eli5.formatters.explain_weights_dfs(crf, top=30)
+weights_exp["targets"][weights_exp["targets"]["target"]=="BEGIN"]
+weights_exp["targets"][weights_exp["targets"]["target"]=="IN"]
+weights_exp["targets"][weights_exp["targets"]["target"]=="OUT"]
 
 
+
+
+
+crf = CRF(
+    algorithm='lbfgs',
+    c1=200,
+    c2=0.1,
+    max_iterations=20,
+    all_possible_transitions=False,
+)
+
+crf.fit(X_train, y_train)
+
+predictions = crf.predict(X_test)
+
+
+
+report = classification_report(MultiLabelBinarizer().fit_transform(y_test),
+                               MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"]).fit_transform(predictions),
+                               target_names=["BEGIN", "IN", "OUT"],
+                               digits=3)
+
+print(report)
+
+
+predictions_bin = ["idiom" if p[0] else "no_idiom" \
+                   for p in MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"]).fit_transform(predictions)]
+y_test_bin = ["idiom" if y[0] else "no_idiom" \
+              for y in MultiLabelBinarizer().fit_transform(y_test)]
 
 draw_cm(y_test_bin, predictions_bin)
+
+
+
+
+weights_exp = eli5.formatters.explain_weights_dfs(crf, top=30)
+weights_exp["targets"][weights_exp["targets"]["target"]=="BEGIN"]
+weights_exp["targets"][weights_exp["targets"]["target"]=="IN"]
+weights_exp["targets"][weights_exp["targets"]["target"]=="OUT"]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
