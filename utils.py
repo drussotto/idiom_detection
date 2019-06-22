@@ -3,13 +3,25 @@ from datetime import datetime
 import re
 from nltk import pos_tag
 import random
-from math import floor
+from math import floor, log
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import numpy as np
+import pickle
+from nltk.corpus import wordnet
 
 
 IDIOMS_FILE = "./data/idioms.txt"
+
+with open("./data/unigrams_freq.pkl", "rb") as f:
+    UNIGRAM_FREQ = pickle.load(f)
+
+with open("./data/bigram_freq.pkl", "rb") as f:
+    BIGRAM_FREQ = pickle.load(f)
+
+UNIGRAM_FREQ_COUNT = sum(UNIGRAM_FREQ.values())
+BIGRAM_FREQ_COUNT = sum(BIGRAM_FREQ.values())
+
 
 def text_has_idiom(text, idiom):
     text = text.lower()
@@ -172,8 +184,66 @@ def stratified_train_test(tagged_sentences,
     
     return train, test
 
-## Taken from Session 5 NER notebook
-def word2features(sent, i):
+
+
+def add_prev_word_features(sent, word_index, features, dist=1, include_PMI=False):
+    if word_index == 0:
+        features['BOS'] = True # Beginning of Sentence
+        return features
+        
+    for i in range(1, dist+1):
+        
+        if word_index - i < 0:
+            return features
+        
+        prev_word, prev_postag, _ = sent[word_index-i]
+
+        features.update({
+            '-{}:word.lower()'.format(i): prev_word.lower(),
+            '-{}:word.istitle()'.format(i): prev_word.istitle(),
+            '-{}:word.isupper()'.format(i): prev_word.isupper(),
+            '-{}:postag'.format(i): prev_postag,
+            '-{}:postag[:2]'.format(i): prev_postag[:2],
+        })
+    
+        if include_PMI:
+            pmi_i = pmi(sent[word_index][0].lower(),
+                        prev_word.lower())
+            
+            features["+{}:pmi".format(i)] = pmi_i
+
+    return features
+
+def add_next_word_features(sent, word_index, features, dist=1, include_PMI=False):
+    if word_index == len(sent)-1:
+        features['EOS'] = True # End of Sentence
+        return features
+        
+    for i in range(word_index+1, word_index+dist+1):
+        
+        if i == len(sent):
+            return features
+        
+        next_word, next_postag, _ = sent[i]
+
+        features.update({
+            '+{}:word.lower()'.format(i-word_index): next_word.lower(),
+            '+{}:word.istitle()'.format(i-word_index): next_word.istitle(),
+            '+{}:word.isupper()'.format(i-word_index): next_word.isupper(),
+            '+{}:postag'.format(i-word_index): next_postag,
+            '+{}:postag[:2]'.format(i-word_index): next_postag[:2],
+        })
+    
+        if include_PMI:
+            pmi_i = pmi(sent[word_index][0].lower(),
+                        next_word.lower())
+            features["+{}:pmi".format(i-word_index)] = pmi_i
+
+    return features
+
+
+## Adapted from Session 5 NER notebook
+def word2features(sent, i, include_PMI=False, dist=1):
     word = sent[i][0]
     postag = sent[i][1]
 
@@ -187,37 +257,19 @@ def word2features(sent, i):
         'postag': postag,
         'postag[:2]': postag[:2],
     }
-    if i > 0:
-        word1 = sent[i-1][0]
-        postag1 = sent[i-1][1]
-        features.update({
-            '-1:word.lower()': word1.lower(),
-            '-1:word.istitle()': word1.istitle(),
-            '-1:word.isupper()': word1.isupper(),
-            '-1:postag': postag1,
-            '-1:postag[:2]': postag1[:2],
-        })
-    else:
-        features['BOS'] = True # Beginning of Sentence
+    
 
-    if i < len(sent)-1:
-        word1 = sent[i+1][0]
-        postag1 = sent[i+1][1]
-        features.update({
-            '+1:word.lower()': word1.lower(),
-            '+1:word.istitle()': word1.istitle(),
-            '+1:word.isupper()': word1.isupper(),
-            '+1:postag': postag1,
-            '+1:postag[:2]': postag1[:2],
-        })
-    else:
-        features['EOS'] = True #End of sentence
+    features = add_prev_word_features(sent, i, features, dist, include_PMI)
+    
+    features = add_next_word_features(sent, i, features, dist, include_PMI)
 
     return features
 
 
-def sent2features(sent):
-    return [word2features(sent, i) for i in range(len(sent))]
+
+
+def sent2features(sent, include_PMI=False):
+    return [word2features(sent, i, include_PMI) for i in range(len(sent))]
 
 def sent2labels(sent):
     return [label for token, postag, label in sent]
@@ -239,3 +291,36 @@ def draw_cm(actual_label, prediction_label):
         for j in range(cm.shape[1]):
             plt.text(x=j, y=i, s=int(cm[i, j]), va='center', ha='center', 
                      color='black', fontsize=20)
+
+
+def pmi(word1, word2):
+    marginal_word1 = float(UNIGRAM_FREQ[word1]) / UNIGRAM_FREQ_COUNT
+    marginal_word2 = float(UNIGRAM_FREQ[word2]) / UNIGRAM_FREQ_COUNT
+ 
+    joint_w1_w2 = float(BIGRAM_FREQ[(word1, word2)])/ BIGRAM_FREQ_COUNT
+    
+    if joint_w1_w2 == 0:
+        pmi = 0
+    else:
+        pmi = round(log(max(0.0005,
+                            joint_w1_w2/(marginal_word1*marginal_word2))
+                        ,2)
+                    ,2)
+    
+    return pmi
+
+
+# Note: taken from class notebook
+def get_wordnet_pos(treebank_tag):
+
+    if treebank_tag.startswith('J'):
+        return wordnet.ADJ
+    elif treebank_tag.startswith('V'):
+        return wordnet.VERB
+    elif treebank_tag.startswith('N'):
+        return wordnet.NOUN
+    elif treebank_tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN #by default is noun
+
