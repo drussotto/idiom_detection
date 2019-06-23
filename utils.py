@@ -9,21 +9,22 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 from nltk.corpus import wordnet
-
+import os
 
 IDIOMS_FILE = "./data/idioms.txt"
 
-with open("./data/unigrams_freq.pkl", "rb") as f:
-    UNIGRAM_FREQ = pickle.load(f)
-
-with open("./data/bigram_freq.pkl", "rb") as f:
-    BIGRAM_FREQ = pickle.load(f)
-
+if os.path.exists("./data/unigrams_freq.pkl"):
+    with open("./data/unigrams_freq.pkl", "rb") as f:
+        UNIGRAM_FREQ = pickle.load(f)
+        UNIGRAM_FREQ_COUNT = sum(UNIGRAM_FREQ.values())
 
 
-UNIGRAM_FREQ_COUNT = sum(UNIGRAM_FREQ.values())
-BIGRAM_FREQ_COUNT = sum(BIGRAM_FREQ.values())
-## Empirically this is expensive to create
+if os.path.exists("./data/bigram_freq.pkl"):
+    with open("./data/bigram_freq.pkl", "rb") as f:
+        BIGRAM_FREQ = pickle.load(f)
+        BIGRAM_FREQ_COUNT = sum(BIGRAM_FREQ.values())
+        
+## Empirically this is expensive to create for some reason
 WNLT = WordNetLemmatizer()
 
 def text_has_idiom(text, idiom):
@@ -190,7 +191,8 @@ def stratified_train_test(tagged_sentences,
 
 
 def add_prev_word_features(sent, word_index, features,
-                           dist=1, include_PMI=False, include_PPMI=False):
+                           dist=1, include_PMI=False,
+                           include_PPMI=False, word2vec=None):
     if word_index == 0:
         features['BOS'] = True # Beginning of Sentence
         return features
@@ -214,18 +216,27 @@ def add_prev_word_features(sent, word_index, features,
             pmi_i = calc_pmi((sent[word_index][0],sent[word_index][1]),
                              (prev_word, prev_postag))
             
-            features["+{}:pmi".format(i)] = pmi_i
+            features["-{}:pmi".format(i)] = pmi_i
         
         if include_PPMI:
-            pmi_i = calc_ppmi((sent[word_index][0],sent[word_index][1]),
+            ppmi_i = calc_ppmi((sent[word_index][0],sent[word_index][1]),
                              (prev_word, prev_postag))
             
-            features["+{}:ppmi".format(i)] = pmi_i
+            features["-{}:ppmi".format(i)] = ppmi_i
+        
+        if word2vec:
+            w2v_i = calc_word2vec_similarity(
+                    (sent[word_index][0],sent[word_index][1]),
+                    (prev_word, prev_postag),
+                    word2vec)
+            
+            features["-{}:word2vec".format(i)] = w2v_i
 
     return features
 
 def add_next_word_features(sent, word_index, features,
-                           dist=1, include_PMI=False, include_PPMI=False):
+                           dist=1, include_PMI=False,
+                           include_PPMI=False, word2vec=None):
     if word_index == len(sent)-1:
         features['EOS'] = True # End of Sentence
         return features
@@ -251,15 +262,25 @@ def add_next_word_features(sent, word_index, features,
             features["+{}:pmi".format(i-word_index)] = pmi_i
         
         if include_PPMI:
-            pmi_i = calc_ppmi((sent[word_index][0], sent[word_index][1]),
+            ppmi_i = calc_ppmi((sent[word_index][0], sent[word_index][1]),
                              (next_word, next_postag))
-            features["+{}:ppmi".format(i-word_index)] = pmi_i
+            features["+{}:ppmi".format(i-word_index)] = ppmi_i
+            
+        if word2vec:
+            w2v_i = calc_word2vec_similarity(
+                    (sent[word_index][0],sent[word_index][1]),
+                    (next_word, next_postag),
+                    word2vec)
+            
+            features["+{}:word2vec".format(i)] = w2v_i
 
     return features
 
 
 ## Adapted from Session 5 NER notebook
-def word2features(sent, i, dist=1, include_PMI=False, include_PPMI=False):
+def word2features(sent, i, dist=1, include_PMI=False,
+                  include_PPMI=False, word2vec=None):
+    
     word = sent[i][0]
     postag = sent[i][1]
 
@@ -277,19 +298,24 @@ def word2features(sent, i, dist=1, include_PMI=False, include_PPMI=False):
 
     features = add_prev_word_features(sent, i, features,
                                       dist=dist,include_PMI=include_PMI,
-                                      include_PPMI=include_PPMI)
+                                      include_PPMI=include_PPMI,
+                                      word2vec=word2vec)
     
     features = add_next_word_features(sent, i, features,
                                       dist=dist,include_PMI=include_PMI,
-                                      include_PPMI=include_PPMI)
+                                      include_PPMI=include_PPMI,
+                                      word2vec=word2vec)
 
     return features
 
 
 
 
-def sent2features(sent, dist=1, include_PMI=False, include_PPMI=False):
-    return [word2features(sent, i, dist, include_PMI, include_PPMI) \
+def sent2features(sent, dist=1, include_PMI=False,
+                  include_PPMI=False, word2vec=None):
+    
+    return [word2features(sent, i, dist, include_PMI,
+                          include_PPMI, word2vec) \
             for i in range(len(sent))]
 
 def sent2labels(sent):
@@ -346,6 +372,29 @@ def calc_pmi(word_w_tag1, word_w_tag2):
 def calc_ppmi(word_w_tag1, word_w_tag2):
     pmi = calc_pmi(word_w_tag1, word_w_tag2)
     return max(0, pmi)
+
+
+## Does it make sense to lemmatize here? Does it for PMI? 
+## I think so, we undersampled like crazy so our dataset isnt THAT big...
+## https://stackoverflow.com/questions/23877375/word2vec-lemmatization-of-corpus-before-training
+#def calc_word2vec_similarity(word1, word2):
+#    return WORD2VEC.similarity(word1, word2)
+
+def calc_word2vec_similarity(word_w_tag1, word_w_tag2, model):
+    word1, pos1 = word_w_tag1
+    word2, pos2 = word_w_tag2
+    
+    word1 = lower_lemmatize(word1, pos1)
+    word2 = lower_lemmatize(word2, pos2)
+    
+    # doesn't contain stopwords, punctuation, numbers, and other words
+    try:
+        retval = model.similarity(word1, word2)
+    except KeyError:
+        retval = 0
+    
+    return retval
+
 
 # Note: taken from class notebook
 def get_wordnet_pos(treebank_tag):

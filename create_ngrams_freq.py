@@ -28,7 +28,7 @@ words = brown.words() + gutenberg.words() + reuters.words() + examples_words
 print("{}: Lowercasing all the words...".format(datetime.now()))
 words_lower = [w.lower() for w in words]
 
-print("{}: Lematizing all the words...".format(datetime.now()))
+print("{}: Lemmatizing all the words...".format(datetime.now()))
 wnlt = nltk.WordNetLemmatizer()
 words_lemmatized = [wnlt.lemmatize(word, get_wordnet_pos(tb_pos)) \
          for word,tb_pos in nltk.pos_tag(words_lower)]
