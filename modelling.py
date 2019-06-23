@@ -4,6 +4,7 @@ from sklearn_crfsuite import CRF
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import classification_report, multilabel_confusion_matrix
 import eli5
+from datetime import datetime
 
 DATA_PATH = "./data/{}.pkl"
 
@@ -111,14 +112,16 @@ weights_exp["targets"][weights_exp["targets"]["target"]=="OUT"]
 # PMI
 # =============================================================================
 
-##TODO: Lemmatize words when calculating the PMI
-
+print("{}: Creating features for train set...".format(datetime.now()))
 X_train = [sent2features(s, include_PMI=True) for s in train]
+print("{}: Getting labels for train set...".format(datetime.now()))
 y_train = [sent2labels(s) for s in train]
 
+print("{}: Creating features for test set".format(datetime.now()))
 X_test = [sent2features(s, include_PMI=True) for s in test]
+print("{}: Getting labels for test set...".format(datetime.now()))
 y_test = [sent2labels(s) for s in test]
-
+print("{}: Finished!".format(datetime.now()))
 
 crf = CRF(
     algorithm='lbfgs',
@@ -157,6 +160,56 @@ weights_exp["targets"][weights_exp["targets"]["target"]=="IN"]
 weights_exp["targets"][weights_exp["targets"]["target"]=="OUT"]
 
 
+# =============================================================================
+# Postive PMI
+# =============================================================================
+
+print("{}: Creating features for train set...".format(datetime.now()))
+X_train = [sent2features(s, include_PPMI=True) for s in train]
+print("{}: Getting labels for train set...".format(datetime.now()))
+y_train = [sent2labels(s) for s in train]
+
+print("{}: Creating features for test set".format(datetime.now()))
+X_test = [sent2features(s, include_PPMI=True) for s in test]
+print("{}: Getting labels for test set...".format(datetime.now()))
+y_test = [sent2labels(s) for s in test]
+print("{}: Finished!".format(datetime.now()))
+
+crf = CRF(
+    algorithm='lbfgs',
+    c1=0.1,
+    c2=0.1,
+    max_iterations=20,
+    all_possible_transitions=False,
+)
+
+
+crf.fit(X_train, y_train)
+
+predictions = crf.predict(X_test)
+
+
+
+report = classification_report(MultiLabelBinarizer().fit_transform(y_test),
+                               MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"]).fit_transform(predictions),
+                               target_names=["BEGIN", "IN", "OUT"],
+                               digits=3)
+
+print(report)
+
+
+predictions_bin = ["idiom" if p[0] else "no_idiom" \
+                   for p in MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"]).fit_transform(predictions)]
+y_test_bin = ["idiom" if y[0] else "no_idiom" \
+              for y in MultiLabelBinarizer().fit_transform(y_test)]
+
+draw_cm(y_test_bin, predictions_bin)
+
+
+weights_exp = eli5.formatters.explain_weights_dfs(crf, top=30)
+weights_exp["targets"][weights_exp["targets"]["target"]=="BEGIN"]
+weights_exp["targets"][weights_exp["targets"]["target"]=="IN"]
+weights_exp["targets"][weights_exp["targets"]["target"]=="OUT"]
 
 
 

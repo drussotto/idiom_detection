@@ -1,7 +1,7 @@
 import os.path
 from datetime import datetime
 import re
-from nltk import pos_tag
+from nltk import pos_tag, WordNetLemmatizer
 import random
 from math import floor, log
 from sklearn.metrics import confusion_matrix
@@ -19,9 +19,12 @@ with open("./data/unigrams_freq.pkl", "rb") as f:
 with open("./data/bigram_freq.pkl", "rb") as f:
     BIGRAM_FREQ = pickle.load(f)
 
+
+
 UNIGRAM_FREQ_COUNT = sum(UNIGRAM_FREQ.values())
 BIGRAM_FREQ_COUNT = sum(BIGRAM_FREQ.values())
-
+## Empirically this is expensive to create
+WNLT = WordNetLemmatizer()
 
 def text_has_idiom(text, idiom):
     text = text.lower()
@@ -186,7 +189,8 @@ def stratified_train_test(tagged_sentences,
 
 
 
-def add_prev_word_features(sent, word_index, features, dist=1, include_PMI=False):
+def add_prev_word_features(sent, word_index, features,
+                           dist=1, include_PMI=False, include_PPMI=False):
     if word_index == 0:
         features['BOS'] = True # Beginning of Sentence
         return features
@@ -207,14 +211,21 @@ def add_prev_word_features(sent, word_index, features, dist=1, include_PMI=False
         })
     
         if include_PMI:
-            pmi_i = pmi(sent[word_index][0].lower(),
-                        prev_word.lower())
+            pmi_i = calc_pmi((sent[word_index][0],sent[word_index][1]),
+                             (prev_word, prev_postag))
             
             features["+{}:pmi".format(i)] = pmi_i
+        
+        if include_PPMI:
+            pmi_i = calc_ppmi((sent[word_index][0],sent[word_index][1]),
+                             (prev_word, prev_postag))
+            
+            features["+{}:ppmi".format(i)] = pmi_i
 
     return features
 
-def add_next_word_features(sent, word_index, features, dist=1, include_PMI=False):
+def add_next_word_features(sent, word_index, features,
+                           dist=1, include_PMI=False, include_PPMI=False):
     if word_index == len(sent)-1:
         features['EOS'] = True # End of Sentence
         return features
@@ -235,15 +246,20 @@ def add_next_word_features(sent, word_index, features, dist=1, include_PMI=False
         })
     
         if include_PMI:
-            pmi_i = pmi(sent[word_index][0].lower(),
-                        next_word.lower())
+            pmi_i = calc_pmi((sent[word_index][0], sent[word_index][1]),
+                             (next_word, next_postag))
             features["+{}:pmi".format(i-word_index)] = pmi_i
+        
+        if include_PPMI:
+            pmi_i = calc_ppmi((sent[word_index][0], sent[word_index][1]),
+                             (next_word, next_postag))
+            features["+{}:ppmi".format(i-word_index)] = pmi_i
 
     return features
 
 
 ## Adapted from Session 5 NER notebook
-def word2features(sent, i, include_PMI=False, dist=1):
+def word2features(sent, i, dist=1, include_PMI=False, include_PPMI=False):
     word = sent[i][0]
     postag = sent[i][1]
 
@@ -259,17 +275,22 @@ def word2features(sent, i, include_PMI=False, dist=1):
     }
     
 
-    features = add_prev_word_features(sent, i, features, dist, include_PMI)
+    features = add_prev_word_features(sent, i, features,
+                                      dist=dist,include_PMI=include_PMI,
+                                      include_PPMI=include_PPMI)
     
-    features = add_next_word_features(sent, i, features, dist, include_PMI)
+    features = add_next_word_features(sent, i, features,
+                                      dist=dist,include_PMI=include_PMI,
+                                      include_PPMI=include_PPMI)
 
     return features
 
 
 
 
-def sent2features(sent, include_PMI=False):
-    return [word2features(sent, i, include_PMI) for i in range(len(sent))]
+def sent2features(sent, dist=1, include_PMI=False, include_PPMI=False):
+    return [word2features(sent, i, dist, include_PMI, include_PPMI) \
+            for i in range(len(sent))]
 
 def sent2labels(sent):
     return [label for token, postag, label in sent]
@@ -293,22 +314,38 @@ def draw_cm(actual_label, prediction_label):
                      color='black', fontsize=20)
 
 
-def pmi(word1, word2):
+def lower_lemmatize(word, tb_pos):
+    lower = word.lower()
+    
+    pos = get_wordnet_pos(tb_pos)
+    
+    return WNLT.lemmatize(lower, pos)
+
+
+#adapted from class notebook
+def calc_pmi(word_w_tag1, word_w_tag2):
+    word1, pos1 = word_w_tag1
+    word2, pos2 = word_w_tag2
+    
+    word1 = lower_lemmatize(word1, pos1)
+    word2 = lower_lemmatize(word2, pos2)
+    
     marginal_word1 = float(UNIGRAM_FREQ[word1]) / UNIGRAM_FREQ_COUNT
     marginal_word2 = float(UNIGRAM_FREQ[word2]) / UNIGRAM_FREQ_COUNT
  
     joint_w1_w2 = float(BIGRAM_FREQ[(word1, word2)])/ BIGRAM_FREQ_COUNT
     
-    if joint_w1_w2 == 0:
-        pmi = 0
-    else:
-        pmi = round(log(max(0.0005,
-                            joint_w1_w2/(marginal_word1*marginal_word2))
-                        ,2)
-                    ,2)
+    # This technically shouldn't happen - need to do postagging in a different way
+    if marginal_word1 == 0 or marginal_word2 == 0:
+        return 0
+    
+    pmi = round(log(max(0.0005, joint_w1_w2/(marginal_word1*marginal_word2)),2),2)
     
     return pmi
 
+def calc_ppmi(word_w_tag1, word_w_tag2):
+    pmi = calc_pmi(word_w_tag1, word_w_tag2)
+    return max(0, pmi)
 
 # Note: taken from class notebook
 def get_wordnet_pos(treebank_tag):

@@ -3,8 +3,12 @@ import pandas as pd
 import nltk
 import pickle
 from utils import get_wordnet_pos
+from datetime import datetime
+from nltk.collocations import BigramCollocationFinder
 
 OUT_PATH = "./data/{}.pkl"
+
+print("{}: Gathering all the words...".format(datetime.now()))
 
 idiom_examples = pd.read_csv("./data/idiom_example.csv")["sentence"]
 
@@ -21,33 +25,33 @@ examples_words = [word for sent in idiom_examples_split \
 # the first sentence of another?
 words = brown.words() + gutenberg.words() + reuters.words() + examples_words
 
-words = [w.lower() for w in words]
+print("{}: Lowercasing all the words...".format(datetime.now()))
+words_lower = [w.lower() for w in words]
 
+print("{}: Lematizing all the words...".format(datetime.now()))
 wnlt = nltk.WordNetLemmatizer()
-words = [wnlt.lemmatize(word, get_wordnet_pos(tb_pos)) \
-         for word,tb_pos in nltk.pos_tag(words)]
+words_lemmatized = [wnlt.lemmatize(word, get_wordnet_pos(tb_pos)) \
+         for word,tb_pos in nltk.pos_tag(words_lower)]
 
 #bigrams = nltk.collocations.BigramCollocationFinder.from_words(
 #        words,
 #        window_size=20)
 
-## How to choose window size?? and what is a noncontiguous bigram??
-
 #bigrams.apply_freq_filter(20)
 #bigrams_freq = bigrams.ngram_fd
 
 
-bigrams_freq = nltk.collocations.BigramCollocationFinder.from_words(words).ngram_fd
-
-
+### TODO(?) : Try different windowsizes
+print("{}: Creating bigrams frequencies and storing results...".format(datetime.now()))
+bigrams_freq = BigramCollocationFinder.from_words(words_lemmatized, window_size=20).ngram_fd
 
 with open(OUT_PATH.format("bigram_freq"), "wb") as f:
     pickle.dump(bigrams_freq, f)
 
 
-
-unigrams = nltk.FreqDist(words)
-unigrams_freq = nltk.FreqDist(words)
+print("{}: Creating unigrams frequencies and storing results...".format(datetime.now()))
+unigrams = nltk.FreqDist(words_lemmatized)
+unigrams_freq = nltk.FreqDist(words_lemmatized)
 #unigrams_freq = {unigram:freq for unigram, freq in unigrams.items() if freq >= 20}
 
 with open(OUT_PATH.format("unigrams_freq"), "wb") as f:
