@@ -10,6 +10,9 @@ import numpy as np
 import pickle
 from nltk.corpus import wordnet
 import os
+from sklearn.metrics import classification_report, f1_score
+from sklearn.preprocessing import MultiLabelBinarizer
+import eli5
 
 IDIOMS_FILE = "./data/idioms.txt"
 
@@ -409,4 +412,78 @@ def get_wordnet_pos(treebank_tag):
         return wordnet.ADV
     else:
         return wordnet.NOUN #by default is noun
+
+def create_features(train, test, dist=1, include_PMI=False,
+                    include_PPMI=False, word2vec=None):
+    
+    print("{}: Creating features for train set...".format(datetime.now()))
+    X_train = [sent2features(s,dist=dist, include_PMI=include_PMI,
+                             include_PPMI=include_PPMI, word2vec=word2vec)\
+                for s in train]
+    
+    print("{}: Getting labels for train set...".format(datetime.now()))
+    y_train = [sent2labels(s) for s in train]
+    
+    print("{}: Creating features for test set".format(datetime.now()))
+    X_test = [sent2features(s,dist=dist, include_PMI=include_PMI,
+                             include_PPMI=include_PPMI, word2vec=word2vec)\
+                for s in test]
+    print("{}: Getting labels for test set...".format(datetime.now()))
+    y_test = [sent2labels(s) for s in test]
+    
+    print("{}: Finished!".format(datetime.now()))
+    
+    return X_train, y_train, X_test, y_test
+
+
+def binary_f1(obs, pred):
+    pred_bin = [p[0] for p in MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"])\
+                               .fit_transform(pred)]
+
+    obs_bin = [y[0] for y in MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"])\
+                               .fit_transform(obs)]
+    
+    return f1_score(obs_bin, pred_bin)
+
+
+def print_classification_report(pred, obs):
+    report = classification_report(
+            MultiLabelBinarizer().fit_transform(obs),
+            MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"]).fit_transform(pred),
+            target_names=["BEGIN", "IN", "OUT"],
+            digits=3)
+    
+    print(report)
+    
+    return report
+
+def binarized_confusion_matrix(pred, obs):
+    pred_bin = ["idiom" if p[0] else "no_idiom" \
+                   for p in MultiLabelBinarizer(classes=["BEGIN", "IN", "OUT"])\
+                               .fit_transform(pred)]
+
+    obs_bin = ["idiom" if y[0] else "no_idiom" \
+                  for y in MultiLabelBinarizer().fit_transform(obs)]
+    
+    draw_cm(obs_bin, pred_bin)
+    
+def explain_weights(crf, html=False, top=30):
+    if html:
+        return eli5.show_weights(crf, top=top)
+    else:
+        return eli5.formatters.explain_weights_dfs(crf, top=30)
+#        weights_exp = eli5.formatters.explain_weights_dfs(crf, top=30)
+#        weights_exp["targets"][weights_exp["targets"]["target"]=="BEGIN"]
+#        weights_exp["targets"][weights_exp["targets"]["target"]=="IN"]
+#        weights_exp["targets"][weights_exp["targets"]["target"]=="OUT"]
+
+
+
+#mtx = multilabel_confusion_matrix(MultiLabelBinarizer().fit_transform(y_test),
+#                                  MultiLabelBinarizer().fit_transform(predictions))
+#
+#
+#print(mtx)
+
+
 
