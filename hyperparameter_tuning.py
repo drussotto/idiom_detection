@@ -17,7 +17,7 @@ import pickle
 import pandas as pd
 from datetime import datetime
 
-import sklearn_crfsuite.metrics as metrics
+#import sklearn_crfsuite.metrics as metrics
 
 DATA_PATH = "./data/{}.pkl"
 

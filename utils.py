@@ -144,15 +144,21 @@ def word_to_tags(word):
     else:
         tag = "OUT"
 
-    ps = pos_tag([word])[0][1]
+    return word, tag
 
-    return word, ps, tag
 
+def add_postags(words_w_tags):
+    words = [word for word, itag in words_w_tags]
+    itags = [itag for word, itag in words_w_tags]
+    postags = [postag for word, postag in pos_tag(words)]
+    
+    return list(zip(words, postags, itags))
+    
 
 def tag_line(line):
-    line = line.strip()
-    tuples = [word_to_tags(w) for w in line.split(" ")]
-    return tuples
+    return add_postags([word_to_tags(w) for w in line.strip().split()])
+    
+
             
 
 def sent_has_idiom(sent):

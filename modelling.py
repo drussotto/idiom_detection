@@ -2,7 +2,7 @@ import pickle
 from utils import sent2features, sent2labels, draw_cm
 from sklearn_crfsuite import CRF
 from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.metrics import classification_report, multilabel_confusion_matrix
+from sklearn.metrics import classification_report
 import eli5
 from datetime import datetime
 import os
