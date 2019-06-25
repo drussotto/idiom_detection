@@ -8,6 +8,13 @@ from datetime import datetime
 import os
 import gensim.models.keyedvectors as word2vec
 
+# =============================================================================
+# THIS FILE IS OUTDATED AND KEPT FOR REFERENCES REASONS;
+# USE "Model Testing.ipynb" and "regularization.py" INSTEAD
+# =============================================================================
+
+
+
 DATA_PATH = "./data/{}.pkl"
 
 with open(DATA_PATH.format("train"), "rb") as f:

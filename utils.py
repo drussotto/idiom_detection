@@ -477,7 +477,7 @@ def explain_weights(crf, html=False, top=30):
     if html:
         return eli5.show_weights(crf, top=top)
     else:
-        return eli5.formatters.explain_weights_dfs(crf, top=30)
+        return eli5.formatters.explain_weights_dfs(crf, top=top)
 #        weights_exp = eli5.formatters.explain_weights_dfs(crf, top=30)
 #        weights_exp["targets"][weights_exp["targets"]["target"]=="BEGIN"]
 #        weights_exp["targets"][weights_exp["targets"]["target"]=="IN"]
